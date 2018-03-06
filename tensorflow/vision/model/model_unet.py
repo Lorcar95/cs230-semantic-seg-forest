@@ -16,8 +16,10 @@ def build_model(is_training, inputs, params):
         output: (tf.Tensor) output of the model
     """
     images = inputs['images']
+    labels = inputs['labels']
 
-    assert images.get_shape().as_list() == [None, params.image_size, params.image_size, 3]
+    assert images.get_shape().as_list() == [None, params.image_size, params.image_size, params.image_channels]
+    assert labels.get_shape().as_list() == [None, params.image_size, params.image_size, params.image_channels]
 
     out = images
     # Define the number of channels of each convolution

@@ -16,9 +16,9 @@ from model.training import train_and_evaluate
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--model_dir', default='experiments/test',
+parser.add_argument('--model_dir', default='experiments_unet/test',
                     help="Experiment directory containing params.json")
-parser.add_argument('--data_dir', default='data/64x64_SIGNS',
+parser.add_argument('--data_dir', default='data/split_FOREST',
                     help="Directory containing the dataset")
 parser.add_argument('--restore_from', default=None,
                     help="Optional, directory or file containing weights to reload before training")
@@ -46,32 +46,39 @@ if __name__ == '__main__':
     # Create the input data pipeline
     logging.info("Creating the datasets...")
     data_dir = args.data_dir
-    train_data_dir = os.path.join(data_dir, "train_signs")
-    dev_data_dir = os.path.join(data_dir, "dev_signs")
+    train_data_dir = os.path.join(data_dir, "train_forest")
+    dev_data_dir = os.path.join(data_dir, "dev_forest")
 
     # Get the filenames from the train and dev sets
     train_filenames = [os.path.join(train_data_dir, f) for f in os.listdir(train_data_dir)
-                       if f.endswith('.jpg')]
+                       if f.endswith('.tif')]
     eval_filenames = [os.path.join(dev_data_dir, f) for f in os.listdir(dev_data_dir)
-                      if f.endswith('.jpg')]
+                      if f.endswith('.tif')]
 
-    # Labels will be between 0 and 5 included (6 classes in total)
-    train_labels = [int(f.split('/')[-1][0]) for f in train_filenames]
-    eval_labels = [int(f.split('/')[-1][0]) for f in eval_filenames]
+    # Get list of images and corresponding labels
+    train_images = [f for f in train_filenames if f.endswith('_image.tif')]
+    train_labels = [f for f in train_filenames if f.endswith('_label.tif')]
+    train_images.sort()
+    train_labels.sort()
+    eval_images = [f for f in eval_filenames if f.endswith('_image.tif')]
+    eval_labels = [f for f in eval_filenames if f.endswith('_label.tif')]
+    eval_images.sort()
+    eval_labels.sort()
 
     # Specify the sizes of the dataset we train on and evaluate on
-    params.train_size = len(train_filenames)
-    params.eval_size = len(eval_filenames)
+    params.train_size = len(train_images)
+    params.eval_size = len(eval_images)
 
     # Create the two iterators over the two datasets
-    train_inputs = input_forest(True, train_filenames, train_labels, params)
-    eval_inputs = input_forest(False, eval_filenames, eval_labels, params)
+    train_inputs = input_forest(True, train_images, train_labels, params)
+    eval_inputs = input_forest(False, eval_images, eval_labels, params)
 
     # Define the model
     logging.info("Creating the model...")
-    train_model_spec = model_unet('train', train_inputs, params)
-    eval_model_spec = model_unet('eval', eval_inputs, params, reuse=True)
+    
+    # train_model_spec = model_unet('train', train_inputs, params)
+    # eval_model_spec = model_unet('eval', eval_inputs, params, reuse=True)
 
-    # Train the model
-    logging.info("Starting training for {} epoch(s)".format(params.num_epochs))
-    train_and_evaluate(train_model_spec, eval_model_spec, args.model_dir, params, args.restore_from)
+    # # Train the model
+    # logging.info("Starting training for {} epoch(s)".format(params.num_epochs))
+    # train_and_evaluate(train_model_spec, eval_model_spec, args.model_dir, params, args.restore_from)
