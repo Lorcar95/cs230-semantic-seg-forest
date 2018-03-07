@@ -169,7 +169,7 @@ def model_unet(mode, inputs, params, reuse=False):
     # Summaries for training
     tf.summary.scalar('loss', loss)
     tf.summary.scalar('accuracy', accuracy)
-    tf.summary.image('train_image', inputs['images'])
+    # tf.summary.image('train_image', inputs['images'])
 
     # #TODO: if mode == 'eval': ?
     # # Add incorrectly labeled images
