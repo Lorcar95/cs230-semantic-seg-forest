@@ -1,6 +1,7 @@
 """Create the input data pipeline using `tf.data`"""
 
 import tensorflow as tf
+import numpy as np
 
 from skimage import io
 
@@ -12,23 +13,31 @@ def _decode_function(image, label):
         - Decode the image from tiff format
         - Convert to float and to range [0, 1]
     """
-    image_decoded = io.imread(image)
-    label_decoded = io.imread(label)
+    image_decoded = io.imread(image.decode())
+    image_decoded = image_decoded.astype(np.float32)
 
-    return image_decoded, label_decoded
+    # TODO: let this accomodate class > 2
+    label_decoded = io.imread(label.decode())
+    label_decoded[label_decoded > 1] = 0
+    label_class = np.zeros((label_decoded.shape[0], label_decoded.shape[1], 2), dtype=np.int64)
+    label_class[...,1] = label_decoded
+    label_class[...,0] = 1-label_decoded
 
-def _parse_function(image, label, size, channels):
+    return image_decoded, label_class
+
+def _parse_function(image, label, size, channels, classes):
     """Clean up the image.
 
     The following operations are applied:
         - Resize to size by size by channels
         - Convert to float and to range [0, 1]
     """
-    # TODO: Implement
-    image_norm = tf.reshape(image, [size, size, channels])
-    label_norm = tf.reshape(label, [size, size, channels])
+    image_reshape = tf.reshape(image, [size, size, channels])
+    label_reshape = tf.reshape(label, [size, size, classes])
 
-    return image_norm, label_norm
+    image_norm = tf.clip_by_value(tf.divide(image_reshape, 10000), 0, 1)
+
+    return image_norm, label_reshape
 
 
 def train_preprocess(image, label, use_random_flip):
@@ -69,8 +78,8 @@ def input_forest(is_training, images, labels, params):
 
     # Create a Dataset serving batches of images and labels
     # We don't repeat for multiple epochs because we always train and evaluate for one epoch
-    decode_fn = lambda f, l: tuple(tf.py_func(_decode_function, [f, l], [tf.uint16, tf.uint16]))
-    parse_fn = lambda f, l: _parse_function(f, l, params.image_size, params.image_channels)
+    decode_fn = lambda f, l: tuple(tf.py_func(_decode_function, [f, l], [tf.float32, tf.int64]))
+    parse_fn = lambda f, l: _parse_function(f, l, params.image_size, params.image_channels, params.image_classes)
     train_fn = lambda f, l: train_preprocess(f, l, params.use_random_flip)
 
     if is_training:

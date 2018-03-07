@@ -2,6 +2,57 @@
 
 import tensorflow as tf
 
+# Taken from https://github.com/kkweon/UNet-in-Tensorflow/blob/master/train.py
+def conv_conv_pool(input_, n_filters, training, name, pool=True, activation=tf.nn.relu):
+    """{Conv -> BN -> RELU}x2 -> {Pool, optional}
+    Args:
+        input_ (4-D Tensor): (batch_size, H, W, C)
+        n_filters (list): number of filters [int, int]
+        training (1-D Tensor): Boolean Tensor
+        name (str): name postfix
+        pool (bool): If True, MaxPool2D
+        activation: Activaion functions
+    Returns:
+        net: output of the Convolution operations
+        pool (optional): output of the max pooling operations
+    """
+    net = input_
+
+    with tf.variable_scope("layer{}".format(name)):
+        for i, F in enumerate(n_filters):
+            net = tf.layers.conv2d(
+                net,
+                F, (3, 3),
+                activation=None,
+                padding='same',
+                name="conv{}".format(i + 1))
+            net = tf.layers.batch_normalization(net, training=training, name="bn{}".format(i + 1))
+            net = activation(net, name="relu{}_{}".format(name, i + 1))
+
+        if pool is False:
+            return net
+
+        pool = tf.layers.max_pooling2d(net, (2, 2), strides=(2, 2), name="pool_{}".format(name))
+        return net, pool
+
+def upconv_concat(inputA, input_B, n_filter, name):
+    """Upsample `inputA` and concat with `input_B`
+    Args:
+        input_A (4-D Tensor): (N, H, W, C)
+        input_B (4-D Tensor): (N, 2*H, 2*H, C2)
+        name (str): name of the concat operation
+    Returns:
+        output (4-D Tensor): (N, 2*H, 2*W, C + C2)
+    """
+    up_conv = tf.layers.conv2d_transpose(
+        inputA,
+        filters=n_filter,
+        kernel_size=2,
+        strides=2,
+        name="upsample_{}".format(name))
+
+    return tf.concat([up_conv, input_B], axis=-1, name="concat_{}".format(name))
+
 
 def build_model(is_training, inputs, params):
     """Compute logits of the model (output distribution)
@@ -19,33 +70,43 @@ def build_model(is_training, inputs, params):
     labels = inputs['labels']
 
     assert images.get_shape().as_list() == [None, params.image_size, params.image_size, params.image_channels]
-    assert labels.get_shape().as_list() == [None, params.image_size, params.image_size, params.image_channels]
+    assert labels.get_shape().as_list() == [None, params.image_size, params.image_size, params.image_classes]
 
-    out = images
     # Define the number of channels of each convolution
-    # For each block, we do: 3x3 conv -> batch norm -> relu -> 2x2 maxpool
-    num_channels = params.num_channels
+    # For each down layer, we do: 3x3 conv (same) -> BN -> relu -> 3x3 conv (same) -> BN -> relu -> 2x2 maxpool
+    nc = params.num_channels
     bn_momentum = params.bn_momentum
-    channels = [num_channels, num_channels * 2, num_channels * 4, num_channels * 8]
-    for i, c in enumerate(channels):
-        with tf.variable_scope('block_{}'.format(i+1)):
-            out = tf.layers.conv2d(out, c, 3, padding='same')
-            if params.use_batch_norm:
-                out = tf.layers.batch_normalization(out, momentum=bn_momentum, training=is_training)
-            out = tf.nn.relu(out)
-            out = tf.layers.max_pooling2d(out, 2, 2)
+    conv1, pool1 = conv_conv_pool(images, [nc, nc], is_training, name=1)
+    conv2, pool2 = conv_conv_pool(pool1, [nc*2, nc*2], is_training, name=2)
+    conv3, pool3 = conv_conv_pool(pool2, [nc*4, nc*4], is_training, name=3)
+    conv4, pool4 = conv_conv_pool(pool3, [nc*8, nc*8], is_training, name=4)
 
-    assert out.get_shape().as_list() == [None, 4, 4, num_channels * 8]
+    # For bottom layer, we do: 3x3 conv (same) -> BN -> relu -> 3x3 conv (same) -> BN -> relu
+    conv5 = conv_conv_pool(pool4, [nc*16, nc*16], is_training, name=5, pool=False)
+    
+    # For each up block, we do: upconv(prev_layer) -> concat(sibling_layer) -> (3x3 conv (same) -> BN -> relu) x2
+    up6 = upconv_concat(conv5, conv4, nc*8, name=6)
+    conv6 = conv_conv_pool(up6, [nc*8, nc*8], is_training, name=6, pool=False)
 
-    out = tf.reshape(out, [-1, 4 * 4 * num_channels * 8])
-    with tf.variable_scope('fc_1'):
-        out = tf.layers.dense(out, num_channels * 8)
-        if params.use_batch_norm:
-            out = tf.layers.batch_normalization(out, momentum=bn_momentum, training=is_training)
-        out = tf.nn.relu(out)
-    with tf.variable_scope('fc_2'):
-        logits = tf.layers.dense(out, params.num_labels)
+    up7 = upconv_concat(conv6, conv3, nc*4, name=7)
+    conv7 = conv_conv_pool(up7, [nc*4, nc*4], is_training, name=7, pool=False)
 
+    up8 = upconv_concat(conv7, conv2, nc*2, name=8)
+    conv8 = conv_conv_pool(up8, [nc*2, nc*2], is_training, name=8, pool=False)
+
+    up9 = upconv_concat(conv8, conv1, nc, name=9)
+    conv9 = conv_conv_pool(up9, [nc, nc], is_training, name=9, pool=False)
+    
+    # print("Conv" + str(9) + ": " + str(conv9.get_shape().as_list()))
+    assert conv9.get_shape().as_list() == [None, params.image_size, params.image_size, nc]
+
+    logits = tf.layers.conv2d(
+        conv9,
+        params.image_classes, (1,1),
+        activation = tf.nn.relu,
+        padding = 'same',
+        name = 'final')
+    # print("Logits: " + str(logits.get_shape().as_list()))
     return logits
 
 
@@ -64,18 +125,18 @@ def model_unet(mode, inputs, params, reuse=False):
     """
     is_training = (mode == 'train')
     labels = inputs['labels']
-    labels = tf.cast(labels, tf.int64)
+    labels_class = tf.argmax(labels, 3)
 
     # -----------------------------------------------------------
     # MODEL: define the layers of the model
     with tf.variable_scope('model', reuse=reuse):
         # Compute the output distribution of the model and the predictions
         logits = build_model(is_training, inputs, params)
-        predictions = tf.argmax(logits, 1)
+        predictions = tf.argmax(logits, 3)
 
     # Define loss and accuracy
-    loss = tf.losses.sparse_softmax_cross_entropy(labels=labels, logits=logits)
-    accuracy = tf.reduce_mean(tf.cast(tf.equal(labels, predictions), tf.float32))
+    loss = tf.losses.softmax_cross_entropy(onehot_labels=labels, logits=logits)
+    accuracy = tf.reduce_mean(tf.cast(tf.equal(labels_class, predictions), tf.float32))
 
     # Define training step that minimizes the loss with the Adam optimizer
     if is_training:
@@ -94,7 +155,7 @@ def model_unet(mode, inputs, params, reuse=False):
     # Metrics for evaluation using tf.metrics (average over whole dataset)
     with tf.variable_scope("metrics"):
         metrics = {
-            'accuracy': tf.metrics.accuracy(labels=labels, predictions=tf.argmax(logits, 1)),
+            'accuracy': tf.metrics.accuracy(labels=labels_class, predictions=predictions),
             'loss': tf.metrics.mean(loss)
         }
 
@@ -110,15 +171,15 @@ def model_unet(mode, inputs, params, reuse=False):
     tf.summary.scalar('accuracy', accuracy)
     tf.summary.image('train_image', inputs['images'])
 
-    #TODO: if mode == 'eval': ?
-    # Add incorrectly labeled images
-    mask = tf.not_equal(labels, predictions)
+    # #TODO: if mode == 'eval': ?
+    # # Add incorrectly labeled images
+    # mask = tf.not_equal(labels, predictions)
 
-    # Add a different summary to know how they were misclassified
-    for label in range(0, params.num_labels):
-        mask_label = tf.logical_and(mask, tf.equal(predictions, label))
-        incorrect_image_label = tf.boolean_mask(inputs['images'], mask_label)
-        tf.summary.image('incorrectly_labeled_{}'.format(label), incorrect_image_label)
+    # # Add a different summary to know how they were misclassified
+    # for label in range(0, params.num_labels):
+    #     mask_label = tf.logical_and(mask, tf.equal(predictions, label))
+    #     incorrect_image_label = tf.boolean_mask(inputs['images'], mask_label)
+    #     tf.summary.image('incorrectly_labeled_{}'.format(label), incorrect_image_label)
 
     # -----------------------------------------------------------
     # MODEL SPECIFICATION

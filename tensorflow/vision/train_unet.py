@@ -46,8 +46,9 @@ if __name__ == '__main__':
     # Create the input data pipeline
     logging.info("Creating the datasets...")
     data_dir = args.data_dir
-    train_data_dir = os.path.join(data_dir, "train_forest")
-    dev_data_dir = os.path.join(data_dir, "dev_forest")
+    train_data_dir = os.path.join(data_dir, 'train_forest')
+    dev_data_dir = os.path.join(data_dir, 'dev_forest')
+    test_data_dir = os.path.join(data_dir, 'test_forest')
 
     # Get the filenames from the train and dev sets
     train_filenames = [os.path.join(train_data_dir, f) for f in os.listdir(train_data_dir)
@@ -75,9 +76,22 @@ if __name__ == '__main__':
 
     # Define the model
     logging.info("Creating the model...")
-    
-    # train_model_spec = model_unet('train', train_inputs, params)
-    # eval_model_spec = model_unet('eval', eval_inputs, params, reuse=True)
+
+    # Sanity check the dataset model
+    # with tf.Session() as sess:
+    #     sess.run(train_inputs['iterator_init_op'])
+    #     num_steps = (params.train_size + params.batch_size - 1) // params.batch_size
+    #     print(num_steps)
+    #     for i in range(num_steps):
+    #         image, label = sess.run([train_inputs['images'], train_inputs['labels']])
+    #         print("Iter: "+ str(i))
+    #         print(image.shape)
+    #         print(label.shape)
+    #         print(image[0])
+    #         print(label[0])
+
+    train_model_spec = model_unet('train', train_inputs, params)
+    eval_model_spec = model_unet('eval', eval_inputs, params, reuse=True)
 
     # # Train the model
     # logging.info("Starting training for {} epoch(s)".format(params.num_epochs))
