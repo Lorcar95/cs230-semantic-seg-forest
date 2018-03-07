@@ -3,7 +3,7 @@
 import tensorflow as tf
 
 # Taken from https://github.com/kkweon/UNet-in-Tensorflow/blob/master/train.py
-def conv_conv_pool(input_, n_filters, training, name, pool=True, activation=tf.nn.relu):
+def conv_conv_pool(input_, n_filters, training, name, pool=True, activation=tf.nn.relu, reg=0.1):
     """{Conv -> BN -> RELU}x2 -> {Pool, optional}
     Args:
         input_ (4-D Tensor): (batch_size, H, W, C)
@@ -25,6 +25,7 @@ def conv_conv_pool(input_, n_filters, training, name, pool=True, activation=tf.n
                 F, (3, 3),
                 activation=None,
                 padding='same',
+                kernel_regularizer=tf.contrib.layers.l2_regularizer(reg),
                 name="conv{}".format(i + 1))
             net = tf.layers.batch_normalization(net, training=training, name="bn{}".format(i + 1))
             net = activation(net, name="relu{}_{}".format(name, i + 1))
@@ -35,7 +36,7 @@ def conv_conv_pool(input_, n_filters, training, name, pool=True, activation=tf.n
         pool = tf.layers.max_pooling2d(net, (2, 2), strides=(2, 2), name="pool_{}".format(name))
         return net, pool
 
-def upconv_concat(inputA, input_B, n_filter, name):
+def upconv_concat(inputA, input_B, n_filter, name, reg=0.1):
     """Upsample `inputA` and concat with `input_B`
     Args:
         input_A (4-D Tensor): (N, H, W, C)
@@ -49,6 +50,7 @@ def upconv_concat(inputA, input_B, n_filter, name):
         filters=n_filter,
         kernel_size=2,
         strides=2,
+        kernel_regularizer=tf.contrib.layers.l2_regularizer(reg),
         name="upsample_{}".format(name))
 
     return tf.concat([up_conv, input_B], axis=-1, name="concat_{}".format(name))
@@ -76,26 +78,27 @@ def build_model(is_training, inputs, params):
     # For each down layer, we do: 3x3 conv (same) -> BN -> relu -> 3x3 conv (same) -> BN -> relu -> 2x2 maxpool
     nc = params.num_channels
     bn_momentum = params.bn_momentum
-    conv1, pool1 = conv_conv_pool(images, [nc, nc], is_training, name=1)
-    conv2, pool2 = conv_conv_pool(pool1, [nc*2, nc*2], is_training, name=2)
-    conv3, pool3 = conv_conv_pool(pool2, [nc*4, nc*4], is_training, name=3)
-    conv4, pool4 = conv_conv_pool(pool3, [nc*8, nc*8], is_training, name=4)
+    reg = params.regularization
+    conv1, pool1 = conv_conv_pool(images, [nc, nc], is_training, name=1, reg=reg)
+    conv2, pool2 = conv_conv_pool(pool1, [nc*2, nc*2], is_training, name=2, reg=reg)
+    conv3, pool3 = conv_conv_pool(pool2, [nc*4, nc*4], is_training, name=3, reg=reg)
+    conv4, pool4 = conv_conv_pool(pool3, [nc*8, nc*8], is_training, name=4, reg=reg)
 
     # For bottom layer, we do: 3x3 conv (same) -> BN -> relu -> 3x3 conv (same) -> BN -> relu
-    conv5 = conv_conv_pool(pool4, [nc*16, nc*16], is_training, name=5, pool=False)
+    conv5 = conv_conv_pool(pool4, [nc*16, nc*16], is_training, name=5, pool=False, reg=reg)
     
     # For each up block, we do: upconv(prev_layer) -> concat(sibling_layer) -> (3x3 conv (same) -> BN -> relu) x2
-    up6 = upconv_concat(conv5, conv4, nc*8, name=6)
-    conv6 = conv_conv_pool(up6, [nc*8, nc*8], is_training, name=6, pool=False)
+    up6 = upconv_concat(conv5, conv4, nc*8, name=6, reg=reg)
+    conv6 = conv_conv_pool(up6, [nc*8, nc*8], is_training, name=6, pool=False, reg=reg)
 
-    up7 = upconv_concat(conv6, conv3, nc*4, name=7)
-    conv7 = conv_conv_pool(up7, [nc*4, nc*4], is_training, name=7, pool=False)
+    up7 = upconv_concat(conv6, conv3, nc*4, name=7, reg=reg)
+    conv7 = conv_conv_pool(up7, [nc*4, nc*4], is_training, name=7, pool=False, reg=reg)
 
-    up8 = upconv_concat(conv7, conv2, nc*2, name=8)
-    conv8 = conv_conv_pool(up8, [nc*2, nc*2], is_training, name=8, pool=False)
+    up8 = upconv_concat(conv7, conv2, nc*2, name=8, reg=reg)
+    conv8 = conv_conv_pool(up8, [nc*2, nc*2], is_training, name=8, pool=False, reg=reg)
 
-    up9 = upconv_concat(conv8, conv1, nc, name=9)
-    conv9 = conv_conv_pool(up9, [nc, nc], is_training, name=9, pool=False)
+    up9 = upconv_concat(conv8, conv1, nc, name=9, reg=reg)
+    conv9 = conv_conv_pool(up9, [nc, nc], is_training, name=9, pool=False, reg=reg)
     
     # print("Conv" + str(9) + ": " + str(conv9.get_shape().as_list()))
     assert conv9.get_shape().as_list() == [None, params.image_size, params.image_size, nc]
@@ -156,7 +159,7 @@ def model_unet(mode, inputs, params, reuse=False):
     with tf.variable_scope("metrics"):
         metrics = {
             'accuracy': tf.metrics.accuracy(labels=labels_class, predictions=predictions),
-            'loss': tf.metrics.mean(loss)
+            'loss': tf.metrics.mean(loss),
         }
 
     # Group the update ops for the tf.metrics
@@ -169,7 +172,9 @@ def model_unet(mode, inputs, params, reuse=False):
     # Summaries for training
     tf.summary.scalar('loss', loss)
     tf.summary.scalar('accuracy', accuracy)
-    # tf.summary.image('train_image', inputs['images'])
+    tf.summary.image('train_image', tf.reverse(inputs['images'][:,:,:,:3], [-1]))
+    tf.summary.image('train_label', tf.cast(tf.expand_dims(labels_class,-1), tf.float32))
+    tf.summary.image('pred_label', tf.cast(tf.expand_dims(predictions,-1), tf.float32))
 
     # #TODO: if mode == 'eval': ?
     # # Add incorrectly labeled images
@@ -187,7 +192,7 @@ def model_unet(mode, inputs, params, reuse=False):
     # It contains nodes or operations in the graph that will be used for training and evaluation
     model_spec = inputs
     model_spec['variable_init_op'] = tf.global_variables_initializer()
-    model_spec["predictions"] = predictions
+    model_spec['predictions'] = predictions
     model_spec['loss'] = loss
     model_spec['accuracy'] = accuracy
     model_spec['metrics_init_op'] = metrics_init_op
