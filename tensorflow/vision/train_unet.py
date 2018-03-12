@@ -15,10 +15,11 @@ from model.model_unet import model_unet
 from model.training import train_and_evaluate
 
 
+ext = '.npy'
 parser = argparse.ArgumentParser()
 parser.add_argument('--model_dir', default='experiments_unet/test',
                     help="Experiment directory containing params.json")
-parser.add_argument('--data_dir', default='data/split_FOREST',
+parser.add_argument('--data_dir', default='data/split_FOREST_aug',
                     help="Directory containing the dataset")
 parser.add_argument('--restore_from', default=None,
                     help="Optional, directory or file containing weights to reload before training")
@@ -52,17 +53,17 @@ if __name__ == '__main__':
 
     # Get the filenames from the train and dev sets
     train_filenames = [os.path.join(train_data_dir, f) for f in os.listdir(train_data_dir)
-                       if f.endswith('.tif')]
+                       if f.endswith(ext)]
     eval_filenames = [os.path.join(dev_data_dir, f) for f in os.listdir(dev_data_dir)
-                      if f.endswith('.tif')]
+                      if f.endswith(ext)]
 
     # Get list of images and corresponding labels
-    train_images = [f for f in train_filenames if f.endswith('_image.tif')]
-    train_labels = [f for f in train_filenames if f.endswith('_label.tif')]
+    train_images = [f for f in train_filenames if f.endswith('_image'+ext)]
+    train_labels = [f for f in train_filenames if f.endswith('_label'+ext)]
     train_images.sort()
     train_labels.sort()
-    eval_images = [f for f in eval_filenames if f.endswith('_image.tif')]
-    eval_labels = [f for f in eval_filenames if f.endswith('_label.tif')]
+    eval_images = [f for f in eval_filenames if f.endswith('_image'+ext)]
+    eval_labels = [f for f in eval_filenames if f.endswith('_label'+ext)]
     eval_images.sort()
     eval_labels.sort()
 
@@ -77,7 +78,7 @@ if __name__ == '__main__':
     # Define the model
     logging.info("Creating the model...")
 
-    # Sanity check the dataset model
+    # # Sanity check the dataset model
     # with tf.Session() as sess:
     #     sess.run(train_inputs['iterator_init_op'])
     #     num_steps = (params.train_size + params.batch_size - 1) // params.batch_size

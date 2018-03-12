@@ -38,7 +38,7 @@ if __name__ == '__main__':
     # Create the input data pipeline
     logging.info("Creating the dataset...")
     data_dir = args.data_dir
-    test_data_dir = os.path.join(data_dir, "dev_forest")
+    test_data_dir = os.path.join(data_dir, "test_forest")
 
     # Get the filenames from the test set
     test_filenames = [os.path.join(test_data_dir, f) for f in os.listdir(test_data_dir)

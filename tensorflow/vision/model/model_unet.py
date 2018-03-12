@@ -55,6 +55,14 @@ def upconv_concat(inputA, input_B, n_filter, name, reg=0.1):
 
     return tf.concat([up_conv, input_B], axis=-1, name="concat_{}".format(name))
 
+def compute_iou(logits, labels):
+    s_logits = tf.nn.softmax(logits)
+    s_labels = tf.cast(labels, tf.float32)
+    inter = tf.reduce_sum(tf.multiply(s_logits,s_labels))
+    union=tf.reduce_sum(tf.subtract(tf.add(s_logits,s_labels),tf.multiply(s_logits,s_labels)))
+    iou = tf.divide(inter,union)
+    return iou
+
 
 def build_model(is_training, inputs, params):
     """Compute logits of the model (output distribution)
@@ -140,6 +148,7 @@ def model_unet(mode, inputs, params, reuse=False):
     # Define loss and accuracy
     loss = tf.losses.softmax_cross_entropy(onehot_labels=labels, logits=logits)
     accuracy = tf.reduce_mean(tf.cast(tf.equal(labels_class, predictions), tf.float32))
+    iou = compute_iou(logits, labels)
 
     # Define training step that minimizes the loss with the Adam optimizer
     if is_training:
@@ -160,6 +169,7 @@ def model_unet(mode, inputs, params, reuse=False):
         metrics = {
             'accuracy': tf.metrics.accuracy(labels=labels_class, predictions=predictions),
             'loss': tf.metrics.mean(loss),
+            'iou': tf.metrics.mean_iou(labels=labels_class, predictions=predictions, num_classes=params.image_classes)
         }
 
     # Group the update ops for the tf.metrics
@@ -172,6 +182,7 @@ def model_unet(mode, inputs, params, reuse=False):
     # Summaries for training
     tf.summary.scalar('loss', loss)
     tf.summary.scalar('accuracy', accuracy)
+    tf.summary.scalar('iou', iou)
     tf.summary.image('train_image', tf.reverse(inputs['images'][:,:,:,:3], [-1]))
     tf.summary.image('train_label', tf.cast(tf.expand_dims(labels_class,-1), tf.float32))
     tf.summary.image('pred_label', tf.cast(tf.expand_dims(predictions,-1), tf.float32))
@@ -195,6 +206,7 @@ def model_unet(mode, inputs, params, reuse=False):
     model_spec['predictions'] = predictions
     model_spec['loss'] = loss
     model_spec['accuracy'] = accuracy
+    model_spec['iou'] = iou
     model_spec['metrics_init_op'] = metrics_init_op
     model_spec['metrics'] = metrics
     model_spec['update_metrics'] = update_metrics_op

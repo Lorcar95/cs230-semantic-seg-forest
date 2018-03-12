@@ -1,29 +1,27 @@
-"""Split the SIGNS dataset into train/dev/test and resize images to 64x64.
+"""Split the FOREST dataset into train/dev/test and resize images to 256x256.
 
-The SIGNS dataset comes in the following format:
-    train_signs/
-        0_IMG_5864.jpg
+The FOREST dataset comes in the following format:
+    _forest_rasters/
+        mask00.TIF
         ...
-    test_signs/
-        0_IMG_5942.jpg
+    _split_rasters/
+        img0.TIF
         ...
 
-Original images have size (3024, 3024).
-Resizing to (64, 64) reduces the dataset size from 1.16 GB to 4.7 MB, and loading smaller images
-makes training faster.
-
-We already have a test set created, so we only need to split "train_signs" into train and dev sets.
-Because we don't have a lot of images and we want that the statistics on the dev set be as
-representative as possible, we'll take 20% of "train_signs" as dev set.
+Original images have size (256, 256).
 """
 
 import argparse
 import random
 import os
 
+import numpy as np
+import matplotlib.pyplot as plt
+
 from shutil import copyfile
-from PIL import Image
 from tqdm import tqdm
+from skimage import io
+from PIL import Image
 
 IMAGE_PATH = '_split_rasters'
 LABEL_PATH = '_forest_rasters'
@@ -34,32 +32,76 @@ LABEL_SUFFIX = '0.TIF'
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--data_dir', default='data/FOREST', help="Directory with the FOREST dataset")
-parser.add_argument('--output_dir', default='data/split_FOREST', help="Where to write the new data")
+parser.add_argument('--output_dir', default='data/split_FOREST_aug', help="Where to write the new data")
 
 
-def process_and_save(filename, output_dir):
+def process_and_save(filename, output_dir, augment=False):
+    images = {}
+
     label_file = filename
     image_file = filename.replace(LABEL_PATH, IMAGE_PATH) \
                         .replace(LABEL_PREFIX, IMAGE_PREFIX) \
                         .replace(LABEL_SUFFIX, IMAGE_SUFFIX)
 
     """Process the image contained in `filename` and save it to the `output_dir`"""
-    # label = Image.open(label_file)
-    # image = Image.open(image_file)
+    label = io.imread(label_file)
+    image = io.imread(image_file)
+    images['_orig'] = (image, label)
 
-    # Use bilinear interpolation instead of the default "nearest neighbor" method
-    # image = image.resize((size, size), Image.BILINEAR)
+    if augment:
+        # Flip image
+        images['_flip'] = (np.flip(image,0), np.flip(label,0))
+
+        # Rotate images
+        new_items = []
+        for tag, ims in images.items():
+            im, lbl = ims
+            for i in range(3):
+                new_items.append((tag+"_rot"+str(i+1), (np.rot90(im,i+1), np.rot90(lbl,i+1))))
+
+        for item in new_items:
+            images[item[0]] = item[1]
+
+        # Add Gaussian noise to images
+        new_items = []
+        for tag, ims in images.items():
+            im, lbl = ims
+            for i in range(1):
+                noise = np.random.normal(0,250,image.shape)
+                new_items.append((tag+"_gaus"+str(i+1), (im+noise, lbl)))
+
+        for item in new_items:
+            images[item[0]] = item[1]
+
+    # # Plot augmented images
+    # n_per_plot = 4
+    # fig, ax = plt.subplots(n_per_plot,2,sharex=True,sharey=True,figsize=(12,5))
+    # i = 0
+    # for tag, ims in images.items():
+    #     idx = i%n_per_plot
+    #     img, lbl = ims
+    #     img_rgb = np.flip(img[:,:,:3]/10000, 2)
+    #     ax[idx,0].imshow(img_rgb)
+    #     ax[idx,1].imshow(lbl)
+    #     ax[idx,0].set_title(tag+" Image")
+    #     ax[idx,1].set_title(tag+" Label")
+    #     i+=1
+    #     if (i%n_per_plot == 0):
+    #         fig, ax = plt.subplots(n_per_plot,2,sharex=True,sharey=True,figsize=(12,5))
+    # plt.show()
+
+    # Create base output file names
+    label_out = label_file.split('/')[-1].replace(LABEL_PREFIX, '').replace(LABEL_SUFFIX, '')
+    label_out = os.path.join(output_dir, label_out)
+    image_out = image_file.split('/')[-1].replace(IMAGE_PREFIX, '').replace(IMAGE_SUFFIX, '')
+    image_out = os.path.join(output_dir, image_out)
 
     # Save images to output directory
-    # label.save(os.path.join(output_dir, label_out))
-    # image.save(os.path.join(output_dir, image_out))
+    for tag, ims in images.items():
+        im, lbl = ims
+        np.save(image_out+tag+"_image.npy", im)
+        np.save(label_out+tag+"_label.npy", lbl)
 
-    label_out = label_file.split('/')[-1].replace(LABEL_PREFIX, '').replace(LABEL_SUFFIX, '_label.tif')
-    label_out = os.path.join(output_dir, label_out)
-    image_out = image_file.split('/')[-1].replace(IMAGE_PREFIX, '').replace(IMAGE_SUFFIX, '_image.tif')
-    image_out = os.path.join(output_dir, image_out)
-    copyfile(label_file, label_out)
-    copyfile(image_file, image_out)
 
 if __name__ == '__main__':
     args = parser.parse_args()
@@ -77,8 +119,8 @@ if __name__ == '__main__':
     filenames.sort()
     random.shuffle(filenames)
 
-    train_split = int(0.8 * len(filenames))
-    dev_split = int(0.9*len(filenames))
+    train_split = int(0.64 * len(filenames))
+    dev_split = int(0.82*len(filenames))
     train_filenames = filenames[:train_split]
     dev_filenames = filenames[train_split:dev_split]
     test_filenames = filenames[dev_split:]
@@ -102,6 +144,9 @@ if __name__ == '__main__':
 
         print("Processing {} data, saving preprocessed data to {}".format(split, output_dir_split))
         for filename in tqdm(filenames[split]):
-            process_and_save(filename, output_dir_split)
+            if split == 'train':
+                process_and_save(filename, output_dir_split, augment=True)
+            else:
+                process_and_save(filename, output_dir_split)
 
     print("Done building dataset")

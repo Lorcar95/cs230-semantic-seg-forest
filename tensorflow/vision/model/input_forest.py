@@ -13,11 +13,11 @@ def _decode_function(image, label):
         - Decode the image from tiff format
         - Convert to float and to range [0, 1]
     """
-    image_decoded = io.imread(image.decode())
+    image_decoded = np.load(image.decode())
     image_decoded = image_decoded.astype(np.float32)
 
     # TODO: let this accomodate class > 2
-    label_decoded = io.imread(label.decode())
+    label_decoded = np.load(label.decode())
     label_decoded[label_decoded > 1] = 0
     label_class = np.zeros((label_decoded.shape[0], label_decoded.shape[1], 2), dtype=np.int64)
     label_class[...,1] = label_decoded

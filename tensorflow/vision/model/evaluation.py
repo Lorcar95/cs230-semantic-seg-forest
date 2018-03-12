@@ -20,6 +20,7 @@ def evaluate_sess(sess, model_spec, num_steps, writer=None, params=None):
         params: (Params) hyperparameters
     """
     update_metrics = model_spec['update_metrics']
+    summary_op = model_spec['summary_op']
     eval_metrics = model_spec['metrics']
     global_step = tf.train.get_global_step()
 
