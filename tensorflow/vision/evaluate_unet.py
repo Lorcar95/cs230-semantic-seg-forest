@@ -13,6 +13,7 @@ from model.utils import Params
 from model.utils import set_logger
 
 
+ext = '.npy'
 parser = argparse.ArgumentParser()
 parser.add_argument('--model_dir', default='experiments_unet/test',
                     help="Experiment directory containing params.json")
@@ -42,9 +43,9 @@ if __name__ == '__main__':
 
     # Get the filenames from the test set
     test_filenames = [os.path.join(test_data_dir, f) for f in os.listdir(test_data_dir)
-                        if f.endswith('.tif')]
-    test_images = [f for f in test_filenames if f.endswith('_image.tif')]
-    test_labels = [f for f in test_filenames if f.endswith('_label.tif')]
+                        if f.endswith(ext)]
+    test_images = [f for f in test_filenames if f.endswith('_image'+ext)]
+    test_labels = [f for f in test_filenames if f.endswith('_label'+ext)]
     test_images.sort()
     test_labels.sort()
 
