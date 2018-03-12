@@ -3,8 +3,6 @@
 import tensorflow as tf
 import numpy as np
 
-from skimage import io
-
 
 def _decode_function(image, label):
     """Obtain the image and label from the filenames (for both training and validation).
