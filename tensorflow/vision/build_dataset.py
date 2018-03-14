@@ -27,21 +27,21 @@ IMAGE_PATH = '_split_rasters'
 LABEL_PATH = '_forest_rasters'
 IMAGE_PREFIX = 'img'
 IMAGE_SUFFIX = '.TIF'
-LABEL_PREFIX = 'mask'
-LABEL_SUFFIX = '0.TIF'
+LABEL_PREFIX = 'maskclip_shape_'
+LABEL_SUFFIX = '.TIF'
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--data_dir', default='data/FOREST', help="Directory with the FOREST dataset")
-parser.add_argument('--output_dir', default='data/split_FOREST_aug', help="Where to write the new data")
+parser.add_argument('--data_dir', default='data/FOREST_FULL', help="Directory with the FOREST dataset")
+parser.add_argument('--output_dir', default='data/split_FOREST_FULL_aug', help="Where to write the new data")
 
 
 def process_and_save(filename, output_dir, augment=False):
     images = {}
 
-    label_file = filename
-    image_file = filename.replace(LABEL_PATH, IMAGE_PATH) \
-                        .replace(LABEL_PREFIX, IMAGE_PREFIX) \
-                        .replace(LABEL_SUFFIX, IMAGE_SUFFIX)
+    image_file = filename
+    label_file = filename.replace(IMAGE_PATH, LABEL_PATH) \
+                        .replace(IMAGE_PREFIX, LABEL_PREFIX) \
+                        .replace(IMAGE_SUFFIX, LABEL_SUFFIX)
 
     """Process the image contained in `filename` and save it to the `output_dir`"""
     label = io.imread(label_file)
@@ -109,9 +109,9 @@ if __name__ == '__main__':
     assert os.path.isdir(args.data_dir), "Couldn't find the dataset at {}".format(args.data_dir)
 
     # Get the filenames in the labels directory
-    label_dir = os.path.join(args.data_dir, LABEL_PATH)
-    filenames = os.listdir(label_dir)
-    filenames = [os.path.join(label_dir, f) for f in filenames if f.endswith(LABEL_SUFFIX)]
+    image_dir = os.path.join(args.data_dir, IMAGE_PATH)
+    filenames = os.listdir(image_dir)
+    filenames = [os.path.join(image_dir, f) for f in filenames if f.endswith(IMAGE_SUFFIX)]
 
     # Split the images in 'train_signs' into 80% train, 10% dev, 10% test
     # Make sure to always shuffle with a fixed seed so that the split is reproducible
@@ -119,11 +119,16 @@ if __name__ == '__main__':
     filenames.sort()
     random.shuffle(filenames)
 
-    train_split = int(0.64 * len(filenames))
-    dev_split = int(0.82*len(filenames))
+    train_split = int(0.8 * len(filenames))
+    dev_split = int(0.9 * len(filenames))
     train_filenames = filenames[:train_split]
     dev_filenames = filenames[train_split:dev_split]
     test_filenames = filenames[dev_split:]
+
+    print(len(filenames))
+    print(len(train_filenames))
+    print(len(dev_filenames))
+    print(len(test_filenames))
 
     filenames = {'train': train_filenames,
                  'dev': dev_filenames,
