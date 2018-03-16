@@ -13,13 +13,17 @@ def _decode_function(image, label):
     """
     image_decoded = np.load(image.decode())
     image_decoded = image_decoded.astype(np.float32)
+    # print("image: " + str(image_decoded.shape))
 
     # TODO: let this accomodate class > 2
     label_decoded = np.load(label.decode())
-    label_decoded[label_decoded > 1] = 0
-    label_class = np.zeros((label_decoded.shape[0], label_decoded.shape[1], 2), dtype=np.int64)
-    label_class[...,1] = label_decoded
-    label_class[...,0] = 1-label_decoded
+    # print(label_decoded)
+    # print("label decode: " + str(label_decoded.shape))
+    # label_class = np.zeros((label_decoded.shape[0], label_decoded.shape[1], 5), dtype=np.int64)
+    # label_class[...,label_decoded] = 1
+    label_class = (np.arange(5) == label_decoded[...,None]).astype(int)
+    # print(label_class)
+    # print("label one-hot: "+ str(label_class.shape))
 
     return image_decoded, label_class
 
@@ -33,7 +37,7 @@ def _parse_function(image, label, size, channels, classes):
     image_reshape = tf.reshape(image, [size, size, channels])
     label_reshape = tf.reshape(label, [size, size, classes])
 
-    image_norm = tf.clip_by_value(tf.divide(image_reshape, 10000), 0, 1)
+    image_norm = tf.clip_by_value(tf.divide(image_reshape, 256), 0, 1)
 
     return image_norm, label_reshape
 

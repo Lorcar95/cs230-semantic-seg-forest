@@ -23,28 +23,35 @@ from tqdm import tqdm
 from skimage import io
 from PIL import Image
 
-IMAGE_PATH = '_split_rasters'
-LABEL_PATH = '_forest_rasters'
+IMAGE_PATH = '_split_rasters/'
+LABEL_PATH = '_forest_rasters/'
 IMAGE_PREFIX = 'img'
 IMAGE_SUFFIX = '.TIF'
-LABEL_PREFIX = 'maskclip_shape_'
-LABEL_SUFFIX = '.TIF'
+LABEL_PREFIX = 'mask'
+LABEL_SUFFIX = '0.TIF'
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--data_dir', default='data/FOREST_FULL', help="Directory with the FOREST dataset")
-parser.add_argument('--output_dir', default='data/split_FOREST_FULL_aug', help="Where to write the new data")
+parser.add_argument('--data_dir', default='data/LANDSAT_FULL', help="Directory with the FOREST dataset")
+parser.add_argument('--output_dir', default='data/LANDSAT_FULL_aug', help="Where to write the new data")
 
 
 def process_and_save(filename, output_dir, augment=False):
     images = {}
 
     image_file = filename
-    label_file = filename.replace(IMAGE_PATH, LABEL_PATH) \
+    image_num = filename.replace(IMAGE_PATH, '') \
+                        .replace(IMAGE_PREFIX, '') \
+                        .replace(IMAGE_SUFFIX, '') \
+                        .split('/')[-1]
+    label_num = str(int(image_num)+1)
+    label_file = image_file.replace(image_num, label_num) \
+                        .replace(IMAGE_PATH, LABEL_PATH) \
                         .replace(IMAGE_PREFIX, LABEL_PREFIX) \
                         .replace(IMAGE_SUFFIX, LABEL_SUFFIX)
 
     """Process the image contained in `filename` and save it to the `output_dir`"""
     label = io.imread(label_file)
+    label = label-1
     image = io.imread(image_file)
     images['_orig'] = (image, label)
 
@@ -67,7 +74,7 @@ def process_and_save(filename, output_dir, augment=False):
         for tag, ims in images.items():
             im, lbl = ims
             for i in range(1):
-                noise = np.random.normal(0,250,image.shape)
+                noise = np.random.normal(0,6.5,image.shape)
                 new_items.append((tag+"_gaus"+str(i+1), (im+noise, lbl)))
 
         for item in new_items:
@@ -80,8 +87,8 @@ def process_and_save(filename, output_dir, augment=False):
     # for tag, ims in images.items():
     #     idx = i%n_per_plot
     #     img, lbl = ims
-    #     img_rgb = np.flip(img[:,:,:3]/10000, 2)
-    #     ax[idx,0].imshow(img_rgb)
+    #     img_rgb = np.flip(img[:,:,:3], 2)
+    #     ax[idx,0].imshow(img_rgb/256)
     #     ax[idx,1].imshow(lbl)
     #     ax[idx,0].set_title(tag+" Image")
     #     ax[idx,1].set_title(tag+" Label")
@@ -91,7 +98,7 @@ def process_and_save(filename, output_dir, augment=False):
     # plt.show()
 
     # Create base output file names
-    label_out = label_file.split('/')[-1].replace(LABEL_PREFIX, '').replace(LABEL_SUFFIX, '')
+    label_out = str(int(label_file.split('/')[-1].replace(LABEL_PREFIX, '').replace(LABEL_SUFFIX, ''))-1)
     label_out = os.path.join(output_dir, label_out)
     image_out = image_file.split('/')[-1].replace(IMAGE_PREFIX, '').replace(IMAGE_SUFFIX, '')
     image_out = os.path.join(output_dir, image_out)
@@ -99,6 +106,11 @@ def process_and_save(filename, output_dir, augment=False):
     # Save images to output directory
     for tag, ims in images.items():
         im, lbl = ims
+        if lbl.shape[0] != 256 or lbl.shape[1] != 256:
+            print(im.shape)
+            print(image_out+tag)
+            print(lbl.shape)
+            break
         np.save(image_out+tag+"_image.npy", im)
         np.save(label_out+tag+"_label.npy", lbl)
 

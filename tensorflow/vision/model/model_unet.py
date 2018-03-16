@@ -148,7 +148,7 @@ def model_unet(mode, inputs, params, reuse=False):
     # Define loss and accuracy
     loss = tf.losses.softmax_cross_entropy(onehot_labels=labels, logits=logits)
     accuracy = tf.reduce_mean(tf.cast(tf.equal(labels_class, predictions), tf.float32))
-    iou = compute_iou(logits, labels)
+    # iou = compute_iou(logits, labels)
 
     # Define training step that minimizes the loss with the Adam optimizer
     if is_training:
@@ -171,6 +171,7 @@ def model_unet(mode, inputs, params, reuse=False):
             'loss': tf.metrics.mean(loss),
             'iou': tf.metrics.mean_iou(labels=labels_class, predictions=predictions, num_classes=params.image_classes)
         }
+    iou = metrics['iou'][0]
 
     # Group the update ops for the tf.metrics
     update_metrics_op = tf.group(*[op for _, op in metrics.values()])
