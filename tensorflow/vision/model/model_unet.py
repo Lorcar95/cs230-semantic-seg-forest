@@ -91,12 +91,16 @@ def build_model(is_training, inputs, params):
     conv2, pool2 = conv_conv_pool(pool1, [nc*2, nc*2], is_training, name=2, reg=reg)
     conv3, pool3 = conv_conv_pool(pool2, [nc*4, nc*4], is_training, name=3, reg=reg)
     conv4, pool4 = conv_conv_pool(pool3, [nc*8, nc*8], is_training, name=4, reg=reg)
+    conv_d5, pool_d5 = conv_conv_pool(pool4, [nc*16, nc*16], is_training, name=10, reg=reg)
 
     # For bottom layer, we do: 3x3 conv (same) -> BN -> relu -> 3x3 conv (same) -> BN -> relu
-    conv5 = conv_conv_pool(pool4, [nc*16, nc*16], is_training, name=5, pool=False, reg=reg)
+    conv5 = conv_conv_pool(pool_d5, [nc*32, nc*32], is_training, name=5, pool=False, reg=reg)
     
     # For each up block, we do: upconv(prev_layer) -> concat(sibling_layer) -> (3x3 conv (same) -> BN -> relu) x2
-    up6 = upconv_concat(conv5, conv4, nc*8, name=6, reg=reg)
+    up_u5 = upconv_concat(conv5, conv_d5, nc*16, name=11, reg=reg)
+    conv_u5 = conv_conv_pool(up_u5, [nc*16, nc*16], is_training, name=11, pool=False, reg=reg)
+
+    up6 = upconv_concat(conv_u5, conv4, nc*8, name=6, reg=reg)
     conv6 = conv_conv_pool(up6, [nc*8, nc*8], is_training, name=6, pool=False, reg=reg)
 
     up7 = upconv_concat(conv6, conv3, nc*4, name=7, reg=reg)
